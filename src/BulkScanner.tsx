@@ -282,7 +282,7 @@ export function BulkScanner() {
           </div>}
           <div className="min-h-0 flex-1 overflow-y-auto p-5">
             {session.current.length ? (
-              <Sortable gap={16} below={24} className="grid grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] gap-4" items={session.current} onMove={(a, b) => setCurrent((c) => move(c, a, b))}
+              <Sortable gap={16} below={24} className="grid grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] items-start gap-4" items={session.current} onMove={(a, b) => setCurrent((c) => move(c, a, b))}
                 render={(p, i) => <Thumb page={p} n={i + 1} t={t} onOpen={() => setView({ target: 'current', i })} onRotate={() => editPages('current', (c) => c.map((x) => x.id === p.id ? { ...x, rot: (x.rot + 90) % 360 } : x))} onRemove={() => editPages('current', (c) => c.filter((x) => x.id !== p.id))} />}
                 tail={!!scanning && <div className="flex aspect-[1/1.414] items-center justify-center rounded-md border border-dashed border-accent/50 text-accent"><Loader2 className="size-6 animate-spin" /></div>} />
             ) : <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-mute">
@@ -426,11 +426,12 @@ function Sortable<X extends { id: string }>({ items, render, onMove, className, 
 }
 
 function Thumb({ page, n, t, onOpen, onRotate, onRemove }: { page: Page; n: number; t: T; onOpen: () => void; onRotate: () => void; onRemove: () => void }) {
-  const b = 'rounded bg-black/60 p-1 text-white hover:bg-black/80'
+  // Box takes the rotated page's own aspect ratio; the unrotated image is sized so that after rotating it fills the box exactly
+  const b = 'rounded bg-black/60 p-1 text-white hover:bg-black/80', side = page.rot % 180 !== 0
   return (
     <div className="group">
-      <div className="relative flex aspect-[1/1.414] items-center justify-center overflow-hidden rounded-md border border-line bg-white shadow-sm group-hover:border-accent" onClick={onOpen}>
-        <img src={urlOf(page.thumb)} alt="" draggable={false} className="max-h-full max-w-full" style={{ transform: `rotate(${page.rot}deg) scale(${page.rot % 180 ? 0.707 : 1})` }} />
+      <div className="relative overflow-hidden rounded-md border border-line bg-white shadow-sm group-hover:border-accent" style={{ aspectRatio: side ? `${page.h} / ${page.w}` : `${page.w} / ${page.h}` }} onClick={onOpen}>
+        <img src={urlOf(page.thumb)} alt="" draggable={false} className="absolute left-1/2 top-1/2 max-w-none" style={{ width: side ? `${page.w / page.h * 100}%` : '100%', height: side ? `${page.h / page.w * 100}%` : '100%', transform: `translate(-50%, -50%) rotate(${page.rot}deg)` }} />
         <div className="absolute right-1.5 top-1.5 hidden gap-1 group-hover:flex" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
           <button className={b} title={t.rotate} onClick={onRotate}><RotateCw className="size-3.5" /></button>
           <button className={b + ' hover:!bg-red-600'} title={t.remove} onClick={onRemove}><Trash2 className="size-3.5" /></button>
