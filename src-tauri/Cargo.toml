@@ -1,6 +1,6 @@
 [package]
 name = "bulk-scanner"
-version = "1.0.0"
+version = "1.0.1"
 description = "Bulk Scanner — scan batches from network (AirScan/eSCL) scanners into named PDFs"
 edition = "2021"
 
