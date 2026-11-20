@@ -253,7 +253,7 @@ export function BulkScanner() {
                       : <p className="truncate" title={`${names[i]}.pdf`}>{names[i]}.pdf</p>}
                     <p className="text-[11px] text-mute">{t.pages(d.pages.length)} · {new Date(d.at).toLocaleTimeString(lang, { hour: '2-digit', minute: '2-digit' })}</p>
                   </div>
-                  <div className="hidden shrink-0 group-hover:flex">
+                  <div className="hidden shrink-0 group-hover:flex" onDoubleClick={(e) => e.stopPropagation()}>
                     <button className={ghost + ' h-6 min-w-6'} title={session.current.length ? t.addPagesBusy : t.addPages} disabled={!!session.current.length || !!scanning} onClick={() => reopen(d, i)}><FilePlus2 className="size-3.5" /></button>
                     <button className={ghost + ' h-6 min-w-6'} title={t.rename} onClick={() => setEditing(d.id)}><Pencil className="size-3.5" /></button>
                     <button className={ghost + ' h-6 min-w-6'} title={t.pdf} onClick={() => void savePdf(d, names[i])}><FileDown className="size-3.5" /></button>
@@ -423,10 +423,10 @@ function Sortable<X extends { id: string }>({ items, render, onMove, className, 
 function Thumb({ page, n, t, onOpen, onRotate, onRemove }: { page: Page; n: number; t: T; onOpen: () => void; onRotate: () => void; onRemove: () => void }) {
   const b = 'rounded bg-black/60 p-1 text-white hover:bg-black/80'
   return (
-    <div className="group" onDoubleClick={onOpen}>
+    <div className="group">
       <div className="relative flex aspect-[1/1.414] items-center justify-center overflow-hidden rounded-md border border-line bg-white shadow-sm group-hover:border-accent" onClick={onOpen}>
         <img src={urlOf(page.thumb)} alt="" draggable={false} className="max-h-full max-w-full" style={{ transform: `rotate(${page.rot}deg) scale(${page.rot % 180 ? 0.707 : 1})` }} />
-        <div className="absolute right-1.5 top-1.5 hidden gap-1 group-hover:flex" onClick={(e) => e.stopPropagation()}>
+        <div className="absolute right-1.5 top-1.5 hidden gap-1 group-hover:flex" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
           <button className={b} title={t.rotate} onClick={onRotate}><RotateCw className="size-3.5" /></button>
           <button className={b + ' hover:!bg-red-600'} title={t.remove} onClick={onRemove}><Trash2 className="size-3.5" /></button>
         </div>
