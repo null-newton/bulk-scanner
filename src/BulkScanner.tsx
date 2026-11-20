@@ -282,7 +282,7 @@ export function BulkScanner() {
           </div>}
           <div className="min-h-0 flex-1 overflow-y-auto p-5">
             {session.current.length ? (
-              <Sortable gap={16} className="grid grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] gap-4" items={session.current} onMove={(a, b) => setCurrent((c) => move(c, a, b))}
+              <Sortable gap={16} below={24} className="grid grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] gap-4" items={session.current} onMove={(a, b) => setCurrent((c) => move(c, a, b))}
                 render={(p, i) => <Thumb page={p} n={i + 1} t={t} onOpen={() => setView({ target: 'current', i })} onRotate={() => editPages('current', (c) => c.map((x) => x.id === p.id ? { ...x, rot: (x.rot + 90) % 360 } : x))} onRemove={() => editPages('current', (c) => c.filter((x) => x.id !== p.id))} />}
                 tail={!!scanning && <div className="flex aspect-[1/1.414] items-center justify-center rounded-md border border-dashed border-accent/50 text-accent"><Loader2 className="size-6 animate-spin" /></div>} />
             ) : <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-mute">
@@ -403,13 +403,13 @@ function Seg<V extends string>({ value, opts, onChange, full, mono }: { value: V
   return <div className={`flex h-7 shrink-0 rounded-md border border-line bg-hover p-0.5 ${full ? 'w-full' : ''}`}>{opts.map(([v, l, off]) => <button key={v} type="button" disabled={off} onClick={() => onChange(v)} className={`whitespace-nowrap rounded-[5px] px-2.5 text-[12px] disabled:opacity-30 ${full ? 'flex-1' : ''} ${mono ? 'font-mono' : ''} ${v === value ? 'bg-field font-medium text-fg shadow-sm' : 'text-mute hover:text-fg'}`}>{l}</button>)}</div>
 }
 
-// Drag-and-drop reordering with an insertion line: the item goes between neighbours, never onto one. `vertical` lists use a horizontal line; `gap` is the CSS gap in px
-function Sortable<X extends { id: string }>({ items, render, onMove, className, tail, vertical, gap = 0 }: { items: X[]; render: (x: X, i: number) => React.ReactNode; onMove: (from: number, to: number) => void; className?: string; tail?: React.ReactNode; vertical?: boolean; gap?: number }) {
+// Drag-and-drop reordering with an insertion line: the item goes between neighbours, never onto one. `vertical` lists use a horizontal line; `gap` is the CSS gap in px, `below` the px under each item the line should skip (e.g. a caption)
+function Sortable<X extends { id: string }>({ items, render, onMove, className, tail, vertical, gap = 0, below = 0 }: { items: X[]; render: (x: X, i: number) => React.ReactNode; onMove: (from: number, to: number) => void; className?: string; tail?: React.ReactNode; vertical?: boolean; gap?: number; below?: number }) {
   const [drag, setDrag] = useState<number | null>(null), [ins, setIns] = useState<number | null>(null)
   const reset = () => { setDrag(null); setIns(null) }
   const drop = (e: React.DragEvent) => { if (drag === null) return; e.preventDefault(); if (ins !== null) { const to = ins > drag ? ins - 1 : ins; if (to !== drag) onMove(drag, to) } reset() }
   const show = (k: number) => drag !== null && ins === k && k !== drag && k !== drag + 1
-  const off = -(gap / 2) - 1.5, line = (k: number, end: boolean) => show(k) && <span className={`pointer-events-none absolute z-10 rounded-full bg-accent ${vertical ? 'inset-x-0 h-[3px]' : 'inset-y-0 w-[3px]'}`} style={{ [vertical ? (end ? 'bottom' : 'top') : (end ? 'right' : 'left')]: off }} />
+  const off = -(gap / 2) - 1.5, line = (k: number, end: boolean) => show(k) && <span className={`pointer-events-none absolute z-10 rounded-full bg-accent ${vertical ? 'inset-x-0 h-[3px]' : 'top-0 w-[3px]'}`} style={{ [vertical ? (end ? 'bottom' : 'top') : (end ? 'right' : 'left')]: off, ...(!vertical && { bottom: below }) }} />
   return (
     <div className={className} onDragOver={(e) => drag !== null && e.preventDefault()} onDrop={drop}>
       {items.map((x, i) => (
