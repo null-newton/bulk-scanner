@@ -21,7 +21,7 @@ const STR = {
     session: 'Files in this session', started: (d: string) => `Started ${d}`, noDocs: 'Finished scans appear here. The session is saved on this device, so you can close the page and resume later.',
     saveAll: (n: number) => `Save all (${n})`, sessions: 'Sessions', newSession: 'New session', resume: 'Resume', active: 'Open', saved: 'Downloaded', delSessionConfirm: 'Delete this session and all its scans from this device?', noSessions: 'No other sessions.', docsCount: (n: number) => `${n} scan${n === 1 ? '' : 's'}`,
     dialogTitle: 'Name this scan', save: 'Save scan', cancel: 'Cancel', dup: 'A scan with this name already exists — a number will be added.',
-    keep: 'Keep anyway', delete: 'Delete', ok: 'Continue', newSessionConfirm: 'Start a new session? The current one stays under Sessions, including the unfinished scan.', addPages: 'Add pages to this file', addPagesBusy: 'Finish the current scan first', addingTo: 'Adding pages to', doneAdding: 'Done adding pages', discardAdded: 'Discard the pages you added and put the file back as it was?', shortcuts: 'S scan · N finish & new · Enter save', rotate: 'Rotate (R)', remove: 'Remove (Del)', rename: 'Rename', pdf: 'Download PDF', lastValues: 'Recent', page: (a: number, b: number) => `Page ${a} of ${b}`,
+    keep: 'Keep anyway', delete: 'Delete', ok: 'Continue', newSessionConfirm: 'Start a new session? The current one stays under Sessions, including the unfinished scan.', addPages: 'Add pages to this file', addPagesBusy: 'Finish the current scan first', addingTo: 'Adding pages to', doneAdding: 'Done adding pages', discardAdded: 'Discard the pages you added and put the file back as it was?', shortcuts: 'S scan · N finish & new · Enter save all', rotate: 'Rotate (R)', remove: 'Remove (Del)', rename: 'Rename', pdf: 'Download PDF', lastValues: 'Recent', page: (a: number, b: number) => `Page ${a} of ${b}`,
   },
   nl: {
     intro: 'Scan veel documenten in één sessie. Elke scan krijgt een naam volgens je eigen regels en alles blijft op deze computer — bewaar alles als ZIP met PDF\'s.',
@@ -36,7 +36,7 @@ const STR = {
     session: 'Bestanden in deze sessie', started: (d: string) => `Gestart ${d}`, noDocs: 'Afgeronde scans verschijnen hier. De sessie wordt op dit toestel bewaard, dus je kunt de pagina sluiten en later verdergaan.',
     saveAll: (n: number) => `Alles opslaan (${n})`, sessions: 'Sessies', newSession: 'Nieuwe sessie', resume: 'Hervatten', active: 'Open', saved: 'Gedownload', delSessionConfirm: 'Deze sessie en alle scans van dit toestel verwijderen?', noSessions: 'Geen andere sessies.', docsCount: (n: number) => `${n} scan${n === 1 ? '' : 's'}`,
     dialogTitle: 'Geef deze scan een naam', save: 'Scan opslaan', cancel: 'Annuleren', dup: 'Er bestaat al een scan met deze naam — er wordt een nummer toegevoegd.',
-    keep: 'Toch behouden', delete: 'Verwijderen', ok: 'Doorgaan', newSessionConfirm: 'Een nieuwe sessie starten? De huidige blijft bewaard onder Sessies, ook de onafgeronde scan.', addPages: "Pagina's toevoegen aan dit bestand", addPagesBusy: 'Rond eerst de huidige scan af', addingTo: "Pagina's toevoegen aan", doneAdding: 'Klaar met toevoegen', discardAdded: "De toegevoegde pagina's weggooien en het bestand terugzetten zoals het was?", shortcuts: 'S scannen · N afronden & nieuw · Enter opslaan', rotate: 'Draaien (R)', remove: 'Verwijderen (Del)', rename: 'Hernoemen', pdf: 'PDF downloaden', lastValues: 'Recent', page: (a: number, b: number) => `Pagina ${a} van ${b}`,
+    keep: 'Toch behouden', delete: 'Verwijderen', ok: 'Doorgaan', newSessionConfirm: 'Een nieuwe sessie starten? De huidige blijft bewaard onder Sessies, ook de onafgeronde scan.', addPages: "Pagina's toevoegen aan dit bestand", addPagesBusy: 'Rond eerst de huidige scan af', addingTo: "Pagina's toevoegen aan", doneAdding: 'Klaar met toevoegen', discardAdded: "De toegevoegde pagina's weggooien en het bestand terugzetten zoals het was?", shortcuts: 'S scannen · N afronden & nieuw · Enter alles opslaan', rotate: 'Draaien (R)', remove: 'Verwijderen (Del)', rename: 'Hernoemen', pdf: 'PDF downloaden', lastValues: 'Recent', page: (a: number, b: number) => `Pagina ${a} van ${b}`,
   },
 }
 type T = (typeof STR)['en']
@@ -186,8 +186,9 @@ export function BulkScanner() {
   const startNew = () => session?.current.length ? confirmThen(t.newSessionConfirm, () => void openSession(), false) : void openSession()
 
   const keys = useRef({ scan, finish }); keys.current = { scan, finish }
+  const scanningRef = useRef(0); scanningRef.current = scanning
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (asking || view || ask || (e.target as HTMLElement).closest('input,select,textarea') || e.ctrlKey || e.metaKey || e.altKey) return; const k = e.key.toLowerCase(); if (k === 's') { e.preventDefault(); void keys.current.scan() } else if (k === 'n') { e.preventDefault(); keys.current.finish('new') } }
+    const onKey = (e: KeyboardEvent) => { if (asking || view || ask || (e.target as HTMLElement).closest('input,select,textarea') || e.ctrlKey || e.metaKey || e.altKey) return; const k = e.key.toLowerCase(); if (k === 's') { e.preventDefault(); void keys.current.scan() } else if (k === 'n') { e.preventDefault(); keys.current.finish('new') } else if (k === 'enter' && !scanningRef.current && !(e.target as HTMLElement).closest('button,a')) { e.preventDefault(); keys.current.finish('saveAll') } }
     addEventListener('keydown', onKey); return () => removeEventListener('keydown', onKey)
   }, [asking, view, ask])
 
