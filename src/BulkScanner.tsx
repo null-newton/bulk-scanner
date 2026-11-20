@@ -95,6 +95,8 @@ const fmtWhen = (ms: number, lang: string) => new Date(ms).toLocaleString(lang, 
 export function BulkScanner() {
   const t = useT(STR), { lang, setLang } = useLang(), upd = useUpdater()
   const [s, setS] = useState<Settings>(loadSettings)
+  const [panes, setPanes] = useState(loadPanes)
+  useEffect(() => { try { localStorage.setItem(PANES_KEY, JSON.stringify(panes)) } catch { /* unavailable */ } }, [panes])
   const [scanners, setScanners] = useState<Scanner[]>([]), [searching, setSearching] = useState(true), [caps, setCaps] = useState<Caps | null>(null), [ip, setIp] = useState(''), [ipOpen, setIpOpen] = useState(false)
   const [session, setSession] = useState<Session | null>(null), [sessions, setSessions] = useState<Session[]>([])
   const [scanning, setScanning] = useState(0), [notice, setNotice] = useState<{ kind: 'error' | 'info'; text: string; keep?: Page[] } | null>(null), abort = useRef<AbortController | null>(null)
@@ -231,7 +233,7 @@ export function BulkScanner() {
 
       <div className="flex min-h-0 flex-1">
         {/* Sidebar: sessions + files */}
-        <aside className="flex w-72 shrink-0 flex-col border-r border-line bg-side">
+        <aside className="flex shrink-0 flex-col border-r border-line bg-side" style={{ width: panes.side }}>
           <div className={head}>{t.sessions}<button className={ghost + ' h-6 min-w-6'} title={t.newSession} disabled={!total || !!scanning} onClick={startNew}><Plus className="size-3.5" /></button></div>
           <div className="max-h-44 shrink-0 overflow-y-auto px-1.5">
             {sessionRows.map((x) => { const active = x.id === session.id, docs = active ? session.docs.length : x.docs.length; return (
@@ -264,6 +266,7 @@ export function BulkScanner() {
           </div>
           <div className="border-t border-line p-2.5"><button className={primary + ' h-8 w-full justify-center'} disabled={!total || !!scanning} onClick={() => finish('saveAll')}><FileArchive className="size-4" />{t.saveAll(total)}</button></div>
         </aside>
+        <Splitter width={panes.side} min={200} max={480} def={PANES.side} onChange={(w) => setPanes((p) => ({ ...p, side: w }))} />
 
         {/* Canvas: current scan */}
         <main className="flex min-w-0 flex-1 flex-col bg-app">
@@ -294,7 +297,8 @@ export function BulkScanner() {
         </main>
 
         {/* Inspector: naming convention */}
-        <aside className="w-80 shrink-0 overflow-y-auto border-l border-line bg-panel">
+        <Splitter width={panes.insp} min={240} max={560} def={PANES.insp} invert onChange={(w) => setPanes((p) => ({ ...p, insp: w }))} />
+        <aside className="shrink-0 overflow-y-auto border-l border-line bg-panel" style={{ width: panes.insp }}>
           <div className={head + ' pt-3.5'}>{t.naming}</div>
           <div className="space-y-3 px-3 pb-4">
             <div className="flex gap-1">
@@ -387,6 +391,21 @@ export function BulkScanner() {
       </Dialog>}
     </div>
   )
+}
+
+const PANES_KEY = 'bulk-scanner:panes', PANES = { side: 288, insp: 320 }
+const loadPanes = (): typeof PANES => { try { return { ...PANES, ...JSON.parse(localStorage.getItem(PANES_KEY) ?? '{}') } } catch { return PANES } }
+
+// Draggable panel edge: hover shows a blue line, drag resizes (inverted for a right-hand panel), double-click restores the default width
+function Splitter({ width, min, max, def, invert, onChange }: { width: number; min: number; max: number; def: number; invert?: boolean; onChange: (w: number) => void }) {
+  const [active, setActive] = useState(false)
+  const down = (e: React.PointerEvent) => {
+    e.preventDefault(); const x0 = e.clientX, w0 = width; setActive(true); document.body.style.cursor = 'col-resize'
+    const move = (m: PointerEvent) => onChange(Math.round(Math.min(max, Math.max(min, w0 + (invert ? x0 - m.clientX : m.clientX - x0)))))
+    const up = () => { setActive(false); document.body.style.cursor = ''; removeEventListener('pointermove', move); removeEventListener('pointerup', up) }
+    addEventListener('pointermove', move); addEventListener('pointerup', up)
+  }
+  return <div className="group relative z-20 -mx-[3px] w-[6px] shrink-0 cursor-col-resize" onPointerDown={down} onDoubleClick={() => onChange(def)}><div className={`absolute inset-y-0 left-1/2 w-[2px] -translate-x-1/2 transition-colors ${active ? 'bg-accent' : 'group-hover:bg-accent/70'}`} /></div>
 }
 
 const Divider = () => <div className="mx-1 h-5 w-px shrink-0 bg-line" />
