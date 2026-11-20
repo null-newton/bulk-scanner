@@ -1,4 +1,4 @@
-# Builds signed installers + updater files (latest.json) for Windows, macOS (Apple Silicon + Intel) and Linux; tag v* to create a draft GitHub release
+# Builds signed installers + updater files (latest.json) for Windows, macOS (one universal app for Apple Silicon + Intel) and Linux; tag v* to create a draft GitHub release
 name: build
 on:
   push: { tags: ['v*'] }
@@ -22,8 +22,7 @@ jobs:
       matrix:
         include:
           - { os: windows-latest, args: '' }
-          - { os: macos-latest, args: '--target aarch64-apple-darwin' }
-          - { os: macos-latest, args: '--target x86_64-apple-darwin' }
+          - { os: macos-latest, args: '--target universal-apple-darwin' }
           - { os: ubuntu-22.04, args: '' }
     runs-on: ${{ matrix.os }}
     steps:

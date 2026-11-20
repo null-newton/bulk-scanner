@@ -23,7 +23,7 @@ Live scanner checks: `cd src-tauri && cargo test -- --ignored --nocapture` (disc
 ## Release
 
 1. Bump `version` in `package.json` (the app reads it from there; keep `src-tauri/Cargo.toml` in step).
-2. `git tag v1.0.1 && git push origin v1.0.1` — `.github/workflows/build.yml` builds Windows (.exe/.msi), macOS Apple Silicon + Intel (.dmg) and Linux (.AppImage/.deb/.rpm), signs the update bundles and attaches everything plus `latest.json` to a draft release.
+2. `git tag v1.0.1 && git push origin v1.0.1` — `.github/workflows/build.yml` builds Windows (.exe/.msi), macOS universal for Apple Silicon + Intel (.dmg) and Linux (.AppImage/.deb/.rpm), signs the update bundles and attaches everything plus `latest.json` to a draft release.
 3. Publish the draft. Installed apps see it within a few seconds of their next launch (and every 6 hours) and show **Update to vX** in the status bar.
 
 The repo must be public: the website download links and the in-app updater (`releases/latest/download/latest.json`) fetch from it without a login.
