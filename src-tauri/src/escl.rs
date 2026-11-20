@@ -101,3 +101,25 @@ pub async fn probe(http: &reqwest::Client, host: &str) -> Result<Scanner, String
   }
   Err(format!("No eSCL scanner answered at {host}"))
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  const CAPS: &str = r#"<scan:ScannerCapabilities><pwg:MakeAndModel>HP Test</pwg:MakeAndModel><scan:Platen><scan:PlatenInputCaps><scan:MaxWidth>2550</scan:MaxWidth><scan:MaxHeight>3507</scan:MaxHeight><scan:ColorMode>RGB24</scan:ColorMode><scan:ColorMode>Grayscale8</scan:ColorMode><scan:XResolution>300</scan:XResolution><scan:XResolution>100</scan:XResolution><pwg:DocumentFormat>image/jpeg</pwg:DocumentFormat></scan:PlatenInputCaps></scan:Platen></scan:ScannerCapabilities>"#;
+
+  #[test]
+  fn parses_capability_xml() {
+    let platen = section(CAPS, "Platen");
+    assert!(!platen.is_empty() && section(CAPS, "Adf").is_empty());
+    assert_eq!(tag(CAPS, "MakeAndModel"), ["HP Test"]);
+    assert_eq!(tag(platen, "XResolution"), ["300", "100"]);
+    assert_eq!(tag(platen, "ColorMode"), ["RGB24", "Grayscale8"]);
+  }
+
+  #[test]
+  fn builds_scan_settings() {
+    let flat = settings_xml("flatbed", "RGB24", 300, 2480, 3508);
+    assert!(flat.contains("<pwg:InputSource>Platen</pwg:InputSource>") && !flat.contains("Duplex") && flat.contains("<scan:XResolution>300<"));
+    assert!(settings_xml("duplex", "Grayscale8", 200, 1, 1).contains("<scan:Duplex>true</scan:Duplex>"));
+  }
+}

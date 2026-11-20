@@ -102,3 +102,34 @@ pub async fn discover(ms: u64) -> Vec<Found> {
   }
   by_id.into_values().collect()
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  // Builds a minimal mDNS answer (PTR + SRV + TXT + A, with name compression) like a printer would send
+  fn answer() -> Vec<u8> {
+    let mut b = vec![0, 0, 0x84, 0, 0, 0, 0, 4, 0, 0, 0, 0];
+    let svc = b.len(); b.extend(enc_name("_uscan._tcp.local")); b.extend([0, 12, 0, 1, 0, 0, 0, 120]);
+    let inst = { let mut v = vec![7]; v.extend(b"HP-Lab1"); v };
+    let mut rd = inst.clone(); rd.extend([0xc0, svc as u8]); b.extend((rd.len() as u16).to_be_bytes()); let iname = b.len(); b.extend(&rd);
+    b.extend([0xc0, iname as u8, 0, 33, 0, 1, 0, 0, 0, 120]); let host = enc_name("hp.local"); b.extend(((6 + host.len()) as u16).to_be_bytes()); b.extend([0, 0, 0, 0, 0, 80]); b.extend(&host);
+    let txt: Vec<u8> = ["ty=HP Color Laser", "rs=/eSCL", "uuid=ABC-1"].iter().flat_map(|s| { let mut v = vec![s.len() as u8]; v.extend(s.as_bytes()); v }).collect();
+    b.extend([0xc0, iname as u8, 0, 16, 0, 1, 0, 0, 0, 120]); b.extend((txt.len() as u16).to_be_bytes()); b.extend(txt);
+    b.extend(host); b.extend([0, 1, 0, 1, 0, 0, 0, 120, 0, 4, 192, 168, 1, 50]);
+    b
+  }
+
+  #[test]
+  fn query_asks_for_both_services() { let q = query(); assert_eq!(q[5], 2); assert_eq!(read_name(&q, 12).0, "_uscan._tcp.local"); }
+
+  #[test]
+  fn parses_scanner_announcement() {
+    let found = Mutex::new(HashMap::new());
+    on_msg(&found, &answer(), "192.168.1.9:5353".parse().unwrap());
+    let f = found.lock().unwrap(); let e = f.values().next().expect("entry");
+    assert_eq!((e.host.as_str(), e.port, e.tls), ("192.168.1.50", 80, false));
+    assert_eq!(e.txt.get("ty").map(String::as_str), Some("HP Color Laser"));
+    assert_eq!(e.txt.get("uuid").map(String::as_str), Some("ABC-1"));
+  }
+}
