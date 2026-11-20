@@ -1,6 +1,7 @@
 // Checks GitHub releases for a newer signed build (release builds only) and installs it on request
 import { useCallback, useEffect, useState } from 'react'
 import { getVersion } from '@tauri-apps/api/app'
+import { isTauri } from '@tauri-apps/api/core'
 import { check, type Update } from '@tauri-apps/plugin-updater'
 import { relaunch } from '@tauri-apps/plugin-process'
 
@@ -8,9 +9,9 @@ export type UpdateState = { kind: 'idle' } | { kind: 'ready'; update: Update } |
 
 export function useUpdater() {
   const [state, setState] = useState<UpdateState>({ kind: 'idle' }), [version, setVersion] = useState('')
-  useEffect(() => { void getVersion().then(setVersion, () => {}) }, [])
+  useEffect(() => { if (isTauri()) void getVersion().then(setVersion, () => {}) }, [])
   useEffect(() => {
-    if (import.meta.env.DEV) return
+    if (import.meta.env.DEV || !isTauri()) return
     const run = () => void check().then((u) => u && setState((s) => s.kind === 'installing' ? s : { kind: 'ready', update: u }), () => {})
     const first = setTimeout(run, 3000), every = setInterval(run, 6 * 3600e3)
     return () => { clearTimeout(first); clearInterval(every) }

@@ -4,14 +4,14 @@ import { ArrowLeft, Download, ArrowRight, Calendar, ChevronLeft, ChevronRight, C
 import { useLang, useT } from './i18n'
 import { useUpdater } from './updater'
 import { buildPdf, buildZip, download } from './pdf-zip'
-import { capabilities, listScanners, runScan, uid, type Caps, type ColorMode, type Page, type Scanner, type Source } from './scanner'
+import { native, capabilities, listScanners, runScan, uid, type Caps, type ColorMode, type Page, type Scanner, type Source } from './scanner'
 import { deleteSession, getSession, listSessions, newSession, putSession, type Doc, type Session } from './store'
 
 const STR = {
   en: {
     intro: 'Scan many documents in one session. Each scan is named by your own rules and everything stays on this computer — save the whole batch as a ZIP of PDFs.',
     loading: 'Opening your scan session…', scanner: 'Scanner', refresh: 'Search network', addIp: 'Add by IP', ipPh: '192.168.1.42',
-    online: (n: number) => `${n} scanner${n === 1 ? '' : 's'} found`, none: 'No scanners found', update: (v: string) => `Update to ${v}`, updating: 'Updating…', updateFail: 'Update failed', updateHint: 'Downloads the new version and restarts the app', searching: 'Searching for scanners…', add: 'Add',
+    online: (n: number) => `${n} scanner${n === 1 ? '' : 's'} found`, none: 'No scanners found', browserOnly: 'Browser preview — demo scanner only, open the app for real scanners', update: (v: string) => `Update to ${v}`, updating: 'Updating…', updateFail: 'Update failed', updateHint: 'Downloads the new version and restarts the app', searching: 'Searching for scanners…', add: 'Add',
     source: 'Source', flatbed: 'Flatbed', feeder: 'Feeder', duplex: 'Duplex', color: 'Colour', mode: { color: 'Colour', gray: 'Grey', bw: 'B&W' }, dpi: 'Resolution', skipBlank: 'Skip blank pages',
     scan: 'Scan pages', scanning: (n: number) => n > 1 ? `Scanning… ${n - 1} received` : 'Scanning…', stop: 'Stop', newScan: 'Finish & new scan', current: 'Current scan', pages: (n: number) => `${n} page${n === 1 ? '' : 's'}`,
     skipped: (n: number) => `${n} blank page${n === 1 ? '' : 's'} skipped`, empty: 'No pages yet. Put a document on the scanner and press Scan.', namePreview: 'Will be saved as', dragHint: 'Drag to reorder · click to view',
@@ -26,7 +26,7 @@ const STR = {
   nl: {
     intro: 'Scan veel documenten in één sessie. Elke scan krijgt een naam volgens je eigen regels en alles blijft op deze computer — bewaar alles als ZIP met PDF\'s.',
     loading: 'Je scansessie openen…', scanner: 'Scanner', refresh: 'Netwerk doorzoeken', addIp: 'Toevoegen via IP', ipPh: '192.168.1.42',
-    online: (n: number) => `${n} scanner${n === 1 ? '' : 's'} gevonden`, none: 'Geen scanners gevonden', update: (v: string) => `Bijwerken naar ${v}`, updating: 'Bijwerken…', updateFail: 'Bijwerken mislukt', updateHint: 'Downloadt de nieuwe versie en herstart de app', searching: 'Scanners zoeken…', add: 'Toevoegen',
+    online: (n: number) => `${n} scanner${n === 1 ? '' : 's'} gevonden`, none: 'Geen scanners gevonden', browserOnly: 'Browservoorbeeld — alleen demoscanner, open de app voor echte scanners', update: (v: string) => `Bijwerken naar ${v}`, updating: 'Bijwerken…', updateFail: 'Bijwerken mislukt', updateHint: 'Downloadt de nieuwe versie en herstart de app', searching: 'Scanners zoeken…', add: 'Toevoegen',
     source: 'Bron', flatbed: 'Glasplaat', feeder: 'Invoer', duplex: 'Dubbelzijdig', color: 'Kleur', mode: { color: 'Kleur', gray: 'Grijs', bw: 'Z/W' }, dpi: 'Resolutie', skipBlank: 'Lege pagina\'s overslaan',
     scan: 'Pagina\'s scannen', scanning: (n: number) => n > 1 ? `Scannen… ${n - 1} ontvangen` : 'Scannen…', stop: 'Stoppen', newScan: 'Afronden & nieuwe scan', current: 'Huidige scan', pages: (n: number) => `${n} pagina${n === 1 ? '' : '\'s'}`,
     skipped: (n: number) => `${n} lege pagina${n === 1 ? '' : '\'s'} overgeslagen`, empty: 'Nog geen pagina\'s. Leg een document op de scanner en druk op Scannen.', namePreview: 'Wordt opgeslagen als', dragHint: 'Sleep om te ordenen · klik om te bekijken',
@@ -227,9 +227,6 @@ export function BulkScanner() {
         <Seg value={s.mode} onChange={(v) => update({ mode: v })} opts={[['color', t.mode.color], ['gray', t.mode.gray], ['bw', t.mode.bw]]} />
         <select className={field.replace('w-full', 'w-24 shrink-0')} title={t.dpi} value={dpi} onChange={(e) => update({ dpi: +e.target.value })}>{dpis.map((d) => <option key={d} value={d}>{d} dpi</option>)}</select>
         <label className="flex shrink-0 items-center gap-1.5 whitespace-nowrap px-1"><input type="checkbox" className="size-3.5 accent-[var(--accent)]" checked={s.skipBlank} onChange={(e) => update({ skipBlank: e.target.checked })} />{t.skipBlank}</label>
-        <div className="flex-1" />
-        {scanning ? <button className={primary} onClick={() => abort.current?.abort()}><Loader2 className="size-4 animate-spin" />{t.scanning(scanning)}<Square className="size-3 fill-current" /></button>
-          : <button className={primary} disabled={!scanner} title="S" onClick={() => void scan()}><ScanLine className="size-4" />{t.scan}</button>}
       </div>
 
       <div className="flex min-h-0 flex-1">
@@ -274,6 +271,8 @@ export function BulkScanner() {
             <div className="min-w-0 flex-1 truncate"><span className="font-semibold">{session.reopened ? t.addingTo : t.current}</span>
               <span className="ml-2 text-mute">{session.reopened ? `${session.reopened.doc.name}.pdf · ` : ''}{t.pages(session.current.length)}</span></div>
             {session.reopened && <button className={btn} onClick={cancelReopen}>{t.cancel}</button>}
+            {scanning ? <button className={primary} onClick={() => abort.current?.abort()}><Loader2 className="size-4 animate-spin" />{t.scanning(scanning)}<Square className="size-3 fill-current" /></button>
+              : <button className={primary} disabled={!scanner} title="S" onClick={() => void scan()}><ScanLine className="size-4" />{t.scan}</button>}
             <button className={btn} title="N" disabled={!session.current.length || !!scanning} onClick={() => finish('new')}>{session.reopened ? <FilePlus2 className="size-4" /> : <Plus className="size-4" />}{session.reopened ? t.doneAdding : t.newScan}</button>
           </div>
           {notice && <div className={`flex shrink-0 items-center gap-2 border-b px-4 py-2 ${notice.kind === 'error' ? 'border-red-500/25 bg-red-500/10 text-red-600 dark:text-red-300' : 'border-line bg-sel'}`}>
@@ -346,6 +345,7 @@ export function BulkScanner() {
       {/* Status bar */}
       <footer className="flex h-7 shrink-0 items-center gap-4 border-t border-line bg-side px-3 text-[12px] text-mute">
         <span className="flex items-center gap-1.5"><span className={`size-2 rounded-full ${searching ? 'animate-pulse bg-amber-400' : scanners.length ? 'bg-emerald-500' : 'bg-red-500'}`} />{searching ? t.searching : t.online(scanners.length)}</span>
+        {!native && <span className="shrink-0 text-ask">{t.browserOnly}</span>}
         <span className="min-w-0 flex-1 truncate">{t.namePreview} <span className="font-mono text-fg">{target}.pdf</span></span>
         <span className="flex shrink-0 items-center gap-1.5"><Keyboard className="size-3.5" />{session.current.length > 1 ? t.dragHint : t.shortcuts}</span>
         {upd.state.kind === 'ready' && <button className="flex shrink-0 items-center gap-1 rounded bg-accent px-2 font-medium text-white hover:brightness-110 disabled:opacity-40" title={t.updateHint} disabled={!!scanning} onClick={() => void upd.install()}><Download className="size-3.5" />{t.update(upd.state.update.version)}</button>}

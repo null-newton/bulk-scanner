@@ -1,5 +1,5 @@
 // Talks to the Rust backend (mDNS discovery + eSCL scan jobs) and turns raw scans into stored pages. Dev builds add a demo scanner.
-import { Channel, invoke } from '@tauri-apps/api/core'
+import { Channel, invoke, isTauri } from '@tauri-apps/api/core'
 export type Source = 'flatbed' | 'feeder' | 'duplex'
 export type ColorMode = 'color' | 'gray' | 'bw'
 export interface Scanner { id: string; name: string; model: string; host: string; port?: number; manual?: boolean; demo?: boolean }
@@ -8,12 +8,14 @@ export interface Page { id: string; blob: Blob; thumb: Blob; w: number; h: numbe
 export interface ScanOpts { source: Source; mode: ColorMode; dpi: number; skipBlank: boolean }
 
 export const uid = () => Math.random().toString(36).slice(2, 10)
-const DEMO: Scanner[] = import.meta.env.DEV ? [{ id: 'demo-1', name: 'Demo scanner', model: 'Simulated feeder + flatbed', host: 'demo', demo: true }] : []
+// True inside the app window; false in a plain browser tab (UI preview: demo scanner only, no Rust backend)
+export const native = isTauri()
+const DEMO: Scanner[] = import.meta.env.DEV || !native ? [{ id: 'demo-1', name: 'Demo scanner', model: 'Simulated feeder + flatbed', host: 'demo', demo: true }] : []
 const err = (e: unknown) => new Error(typeof e === 'string' ? e : (e as Error)?.message ?? String(e))
 const call = <T,>(cmd: string, args?: Record<string, unknown>) => invoke<T>(cmd, args).catch((e) => { throw err(e) })
 
 export const bridgeOnline = async () => true
-export const listScanners = async (_online: boolean, host?: string) => [...await call<Scanner[]>('list_scanners', { host: host ?? null }), ...(host ? [] : DEMO)]
+export const listScanners = async (_online: boolean, host?: string) => !native ? (host ? Promise.reject(new Error('Adding scanners by IP only works in the desktop app')) : DEMO) : [...await call<Scanner[]>('list_scanners', { host: host ?? null }), ...(host ? [] : DEMO)]
 export const capabilities = (id: string): Promise<Caps> => id.startsWith('demo') ? Promise.resolve({ sources: ['flatbed', 'feeder', 'duplex'], resolutions: [150, 300, 600], modes: [] }) : call<Caps>('capabilities', { id })
 
 type Msg = { type: 'page'; n: number; dpi: number; data: string }

@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
+import { invoke, isTauri } from '@tauri-apps/api/core'
 import { save } from '@tauri-apps/plugin-dialog'
 
 // Minimal in-browser PDF (JPEG pages) and store-only ZIP writers — no dependencies, nothing leaves the device.
@@ -51,6 +51,7 @@ export function buildZip(files: { name: string; data: Uint8Array }[]): Blob {
 
 // Asks where to save and writes the file natively; resolves false when the dialog is cancelled
 export async function download(blob: Blob, name: string) {
+  if (!isTauri()) { const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: name }); a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); return true }
   const ext = name.split('.').pop() ?? '', path = await save({ defaultPath: name, filters: [{ name: ext.toUpperCase(), extensions: [ext] }] })
   if (!path) return false
   await invoke('save_file', new Uint8Array(await blob.arrayBuffer()), { headers: { path: encodeURIComponent(path) } }); return true
