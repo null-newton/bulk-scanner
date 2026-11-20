@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowLeft, Download, ArrowRight, Calendar, ChevronLeft, ChevronRight, Clock, Copy, FileArchive, FileDown, FilePlus2, FolderOpen, Hash, Keyboard, Loader2, Pencil, Plus, Printer, RefreshCw, RotateCw, ScanLine, Square, TextCursorInput, Trash2, Type, X } from 'lucide-react'
+import { ArrowLeft, ChevronDown, Combine, Crop, Download, FolderInput, Scissors, Wand2, ArrowRight, Calendar, ChevronLeft, ChevronRight, Clock, Copy, FileArchive, FileDown, FilePlus2, FolderOpen, Hash, Keyboard, Loader2, Pencil, Plus, Printer, RefreshCw, RotateCw, ScanLine, Square, TextCursorInput, Trash2, Type, X } from 'lucide-react'
 import { useLang, useT } from './i18n'
 import { useUpdater } from './updater'
 import { buildPdf, buildZip, download } from './pdf-zip'
-import { native, capabilities, listScanners, runScan, uid, type Caps, type ColorMode, type Page, type Scanner, type Source } from './scanner'
+import { native, capabilities, cropPage, listScanners, runScan, uid, type Caps, type ColorMode, type Page, type Scanner, type Source } from './scanner'
 import { deleteSession, getSession, listSessions, newSession, putSession, type Doc, type Session } from './store'
 
 const STR = {
@@ -12,7 +12,7 @@ const STR = {
     intro: 'Scan many documents in one session. Each scan is named by your own rules and everything stays on this computer — save the whole batch as a ZIP of PDFs.',
     loading: 'Opening your scan session…', scanner: 'Scanner', refresh: 'Search network', addIp: 'Add by IP', ipPh: '192.168.1.42',
     online: (n: number) => `${n} scanner${n === 1 ? '' : 's'} found`, none: 'No scanners found', browserOnly: 'Browser preview — demo scanner only, open the app for real scanners', update: (v: string) => `Update to ${v}`, updating: 'Updating…', updateFail: 'Update failed', updateHint: 'Downloads the new version and restarts the app', searching: 'Searching for scanners…', add: 'Add',
-    source: 'Source', flatbed: 'Flatbed', feeder: 'Feeder', duplex: 'Duplex', color: 'Colour', mode: { color: 'Colour', gray: 'Grey', bw: 'B&W' }, dpi: 'Resolution', skipBlank: 'Skip blank pages',
+    source: 'Source', flatbed: 'Flatbed', feeder: 'Feeder', duplex: 'Duplex', color: 'Colour', mode: { color: 'Colour', gray: 'Grey', bw: 'B&W' }, dpi: 'Resolution', skipBlank: 'Skip blank pages', moveTo: 'Move to', mergeInto: 'Merge into', split: 'Split here', splitHint: 'Start a new file from this page', cropPage: 'Crop page', applyCrop: 'Apply crop', cropHint: 'Drag over the page to select the area to keep', cleanup: 'Clean-up', autoRotate: 'Turn pages upright', straighten: 'Straighten crooked pages', crop: 'Crop to the document (flatbed)', cleanupHint: 'Applied to each page as it is scanned. Upright detection works on pages with text.', fixed: (n: number) => `${n} page${n === 1 ? '' : 's'} auto-fixed`,
     scan: 'Scan pages', scanning: (n: number) => n > 1 ? `Scanning… ${n - 1} received` : 'Scanning…', stop: 'Stop', newScan: 'Finish & new scan', current: 'Current scan', pages: (n: number) => `${n} page${n === 1 ? '' : 's'}`,
     skipped: (n: number) => `${n} blank page${n === 1 ? '' : 's'} skipped`, empty: 'No pages yet. Put a document on the scanner and press Scan.', namePreview: 'Will be saved as', dragHint: 'Drag to reorder · click to view',
     naming: 'Naming convention', preset: 'Preset', newPreset: 'New preset', dupPreset: 'Duplicate', delPreset: 'Delete preset', delPresetConfirm: 'Delete this naming preset?', presetName: 'Preset name', copyOf: (n: string) => `${n} copy`,
@@ -27,7 +27,7 @@ const STR = {
     intro: 'Scan veel documenten in één sessie. Elke scan krijgt een naam volgens je eigen regels en alles blijft op deze computer — bewaar alles als ZIP met PDF\'s.',
     loading: 'Je scansessie openen…', scanner: 'Scanner', refresh: 'Netwerk doorzoeken', addIp: 'Toevoegen via IP', ipPh: '192.168.1.42',
     online: (n: number) => `${n} scanner${n === 1 ? '' : 's'} gevonden`, none: 'Geen scanners gevonden', browserOnly: 'Browservoorbeeld — alleen demoscanner, open de app voor echte scanners', update: (v: string) => `Bijwerken naar ${v}`, updating: 'Bijwerken…', updateFail: 'Bijwerken mislukt', updateHint: 'Downloadt de nieuwe versie en herstart de app', searching: 'Scanners zoeken…', add: 'Toevoegen',
-    source: 'Bron', flatbed: 'Glasplaat', feeder: 'Invoer', duplex: 'Dubbelzijdig', color: 'Kleur', mode: { color: 'Kleur', gray: 'Grijs', bw: 'Z/W' }, dpi: 'Resolutie', skipBlank: 'Lege pagina\'s overslaan',
+    source: 'Bron', flatbed: 'Glasplaat', feeder: 'Invoer', duplex: 'Dubbelzijdig', color: 'Kleur', mode: { color: 'Kleur', gray: 'Grijs', bw: 'Z/W' }, dpi: 'Resolutie', skipBlank: 'Lege pagina\'s overslaan', moveTo: 'Verplaatsen naar', mergeInto: 'Samenvoegen met', split: 'Hier splitsen', splitHint: 'Begin vanaf deze pagina een nieuw bestand', cropPage: 'Pagina bijsnijden', applyCrop: 'Bijsnijden', cropHint: 'Sleep over de pagina om het deel te kiezen dat je wilt houden', cleanup: 'Opschonen', autoRotate: 'Pagina\'s rechtop zetten', straighten: 'Scheve pagina\'s rechtzetten', crop: 'Bijsnijden tot het document (glasplaat)', cleanupHint: 'Wordt op elke pagina toegepast tijdens het scannen. Rechtop zetten werkt op pagina\'s met tekst.', fixed: (n: number) => `${n} pagina${n === 1 ? '' : '\'s'} automatisch verbeterd`,
     scan: 'Pagina\'s scannen', scanning: (n: number) => n > 1 ? `Scannen… ${n - 1} ontvangen` : 'Scannen…', stop: 'Stoppen', newScan: 'Afronden & nieuwe scan', current: 'Huidige scan', pages: (n: number) => `${n} pagina${n === 1 ? '' : '\'s'}`,
     skipped: (n: number) => `${n} lege pagina${n === 1 ? '' : '\'s'} overgeslagen`, empty: 'Nog geen pagina\'s. Leg een document op de scanner en druk op Scannen.', namePreview: 'Wordt opgeslagen als', dragHint: 'Sleep om te ordenen · klik om te bekijken',
     naming: 'Naamconventie', preset: 'Voorinstelling', newPreset: 'Nieuwe voorinstelling', dupPreset: 'Dupliceren', delPreset: 'Voorinstelling verwijderen', delPresetConfirm: 'Deze naamvoorinstelling verwijderen?', presetName: 'Naam voorinstelling', copyOf: (n: string) => `${n} kopie`,
@@ -44,11 +44,11 @@ type T = (typeof STR)['en']
 type Kind = 'date' | 'time' | 'text' | 'sep' | 'input' | 'counter'
 interface Block { id: string; kind: Kind; value?: string; fmt?: string; label?: string; pad?: number; when?: 'today' | 'ask' | 'fixed'; date?: string }
 interface Preset { id: string; name: string; blocks: Block[]; counter: number }
-interface Settings { scannerId: string; source: Source; mode: ColorMode; dpi: number; skipBlank: boolean; presets: Preset[]; presetId: string; recent: Record<string, string[]> }
+interface Settings { scannerId: string; source: Source; mode: ColorMode; dpi: number; skipBlank: boolean; autoRotate: boolean; straighten: boolean; crop: boolean; presets: Preset[]; presetId: string; recent: Record<string, string[]> }
 
 const KEY = 'bulk-scanner:v1', SESSION_KEY = 'bulk-scanner:session'
 const DEF_PRESET: Preset = { id: 'default', name: 'Default', counter: 1, blocks: [{ id: uid(), kind: 'date', fmt: 'dmonth' }, { id: uid(), kind: 'sep', value: '_' }, { id: uid(), kind: 'input', label: 'Description' }] }
-const DEFAULTS: Settings = { scannerId: '', source: 'feeder', mode: 'color', dpi: 300, skipBlank: true, presets: [DEF_PRESET], presetId: DEF_PRESET.id, recent: {} }
+const DEFAULTS: Settings = { scannerId: '', source: 'feeder', mode: 'color', dpi: 300, skipBlank: true, autoRotate: true, straighten: true, crop: true, presets: [DEF_PRESET], presetId: DEF_PRESET.id, recent: {} }
 const DATE_FMTS = ['dmonth', 'iso', 'dmy', 'compact', 'ym'] as const
 const ICONS: Record<Kind, typeof Calendar> = { date: Calendar, time: Clock, text: Type, sep: Hash, input: TextCursorInput, counter: Hash }
 
@@ -153,8 +153,9 @@ export function BulkScanner() {
     if (scanning || !scanner || !session) return
     const ac = new AbortController(); abort.current = ac; setNotice(null); setScanning(1)
     try {
-      const skipped = await runScan(scanner, { source, mode: s.mode, dpi, skipBlank: s.skipBlank }, (p) => setCurrent((c) => [...c, p]), (n) => setScanning(n), ac.signal)
-      if (skipped.length) setNotice({ kind: 'info', text: t.skipped(skipped.length), keep: skipped })
+      const { skipped, fixed } = await runScan(scanner, { source, mode: s.mode, dpi, skipBlank: s.skipBlank, autoRotate: s.autoRotate, straighten: s.straighten, crop: s.crop }, (p) => setCurrent((c) => [...c, p]), (n) => setScanning(n), ac.signal)
+      const msg = [fixed && t.fixed(fixed), skipped.length && t.skipped(skipped.length)].filter(Boolean).join(' · ')
+      if (msg) setNotice({ kind: 'info', text: msg, keep: skipped.length ? skipped : undefined })
     } catch (e) { if (!ac.signal.aborted) setNotice({ kind: 'error', text: (e as Error).message }) }
     setScanning(0); abort.current = null
   }
@@ -177,6 +178,19 @@ export function BulkScanner() {
     if (then === 'saveAll') void saveAll(docs)
   }
   // Moves a finished file back into the current scan so more pages can be added; finishing puts it back under the same name
+  // Page tools: move a page to another file (or the current scan), merge whole files, split a file, crop a page
+  const movePage = (from: string, id: string, to: string) => patch((x) => {
+    const page = (from === 'current' ? x.current : x.docs.find((d) => d.id === from)?.pages ?? []).find((p) => p.id === id)
+    if (!page) return {}
+    const strip = (ps: Page[]) => ps.filter((p) => p.id !== id)
+    const current = to === 'current' ? [...x.current, page] : from === 'current' ? strip(x.current) : x.current
+    const docs = x.docs.map((d) => d.id === from ? { ...d, pages: strip(d.pages) } : d.id === to ? { ...d, pages: [...d.pages, page] } : d).filter((d) => d.pages.length)
+    return { current, docs }
+  })
+  const mergeDoc = (src: string, dst: string) => patch((x) => { const a = x.docs.find((d) => d.id === src); return a ? { docs: x.docs.filter((d) => d.id !== src).map((d) => d.id === dst ? { ...d, pages: [...d.pages, ...a.pages] } : d) } : {} })
+  const splitDoc = (id: string, at: number) => { const nid = uid(); patch((x) => ({ docs: x.docs.flatMap((d) => d.id === id ? [{ ...d, pages: d.pages.slice(0, at) }, { ...d, id: nid, pages: d.pages.slice(at), at: Date.now() }] : [d]) })); setView({ target: nid, i: 0 }) }
+  const cropOne = async (target: string, id: string, r: { x: number; y: number; w: number; h: number }) => { const p = (target === 'current' ? session?.current : session?.docs.find((d) => d.id === target)?.pages)?.find((x) => x.id === id); if (!p) return; const c = await cropPage(p, r); editPages(target, (ps) => ps.map((x) => x.id === id ? c : x)) }
+  const targetsFor = (from: string): Target[] => [...(from !== 'current' && !session?.reopened ? [{ id: 'current', label: t.current }] : []), ...(session?.docs ?? []).flatMap((d, k) => d.id === from ? [] : [{ id: d.id, label: `${uniqueNames(session!.docs)[k]}.pdf` }])]
   const reopen = (d: Doc, index: number) => patch((x) => ({ current: d.pages, docs: x.docs.filter((y) => y.id !== d.id), reopened: { doc: d, index } }))
   const cancelReopen = () => { const ro = session?.reopened; if (!ro) return; const undo = () => patch((x) => { const docs = [...x.docs]; docs.splice(Math.min(ro.index, docs.length), 0, ro.doc); return { docs, current: [], reopened: undefined } }); if (session.current.length !== ro.doc.pages.length) confirmThen(t.discardAdded, undo); else undo() }
   async function saveAll(docs: Doc[]) {
@@ -228,7 +242,10 @@ export function BulkScanner() {
         <Seg value={source} onChange={(v) => update({ source: v })} opts={(['flatbed', 'feeder', 'duplex'] as Source[]).map((v) => [v, t[v], !!caps && !caps.sources.includes(v)])} />
         <Seg value={s.mode} onChange={(v) => update({ mode: v })} opts={[['color', t.mode.color], ['gray', t.mode.gray], ['bw', t.mode.bw]]} />
         <select className={field.replace('w-full', 'w-24 shrink-0')} title={t.dpi} value={dpi} onChange={(e) => update({ dpi: +e.target.value })}>{dpis.map((d) => <option key={d} value={d}>{d} dpi</option>)}</select>
-        <label className="flex shrink-0 items-center gap-1.5 whitespace-nowrap px-1"><input type="checkbox" className="size-3.5 accent-[var(--accent)]" checked={s.skipBlank} onChange={(e) => update({ skipBlank: e.target.checked })} />{t.skipBlank}</label>
+        <Menu label={<><Wand2 className="size-4" />{t.cleanup}<span className="text-mute">{[s.skipBlank, s.autoRotate, s.straighten, s.crop].filter(Boolean).length}/4</span><ChevronDown className="size-3.5 text-mute" /></>}>
+          {([['skipBlank', t.skipBlank], ['autoRotate', t.autoRotate], ['straighten', t.straighten], ['crop', t.crop]] as const).map(([k, l]) => <label key={k} className="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-hover"><input type="checkbox" className="size-3.5 accent-[var(--accent)]" checked={s[k]} onChange={(e) => update({ [k]: e.target.checked })} />{l}</label>)}
+          <p className="max-w-64 px-2 pb-1 pt-1.5 text-[12px] leading-4 text-mute">{t.cleanupHint}</p>
+        </Menu>
       </div>
 
       <div className="flex min-h-0 flex-1">
@@ -255,8 +272,9 @@ export function BulkScanner() {
                       : <p className="truncate" title={`${names[i]}.pdf`}>{names[i]}.pdf</p>}
                     <p className="text-[11px] text-mute">{t.pages(d.pages.length)} · {new Date(d.at).toLocaleTimeString(lang, { hour: '2-digit', minute: '2-digit' })}</p>
                   </div>
-                  <div className="hidden shrink-0 group-hover:flex" onDoubleClick={(e) => e.stopPropagation()}>
+                  <div className="hidden shrink-0 group-hover:flex has-[[data-open]]:flex" onDoubleClick={(e) => e.stopPropagation()}>
                     <button className={ghost + ' h-6 min-w-6'} title={session.current.length ? t.addPagesBusy : t.addPages} disabled={!!session.current.length || !!scanning} onClick={() => reopen(d, i)}><FilePlus2 className="size-3.5" /></button>
+                    {session.docs.length > 1 && <Menu btn={ghost + ' h-6 min-w-6'} title={t.mergeInto} align="right" label={<Combine className="size-3.5" />}><MoveList t={{ ...t, moveTo: t.mergeInto }} targets={targetsFor(d.id).filter((x) => x.id !== 'current')} onPick={(to) => mergeDoc(d.id, to)} /></Menu>}
                     <button className={ghost + ' h-6 min-w-6'} title={t.rename} onClick={() => setEditing(d.id)}><Pencil className="size-3.5" /></button>
                     <button className={ghost + ' h-6 min-w-6'} title={t.pdf} onClick={() => void savePdf(d, names[i])}><FileDown className="size-3.5" /></button>
                     <button className={ghost + ' h-6 min-w-6 hover:!text-red-500'} title={t.delete} onClick={() => setDocs((x) => x.filter((y) => y.id !== d.id))}><Trash2 className="size-3.5" /></button>
@@ -286,7 +304,7 @@ export function BulkScanner() {
           <div className="min-h-0 flex-1 overflow-y-auto p-5">
             {session.current.length ? (
               <Sortable gap={16} below={24} className="grid grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] items-start gap-4" items={session.current} onMove={(a, b) => setCurrent((c) => move(c, a, b))}
-                render={(p, i) => <Thumb page={p} n={i + 1} t={t} onOpen={() => setView({ target: 'current', i })} onRotate={() => editPages('current', (c) => c.map((x) => x.id === p.id ? { ...x, rot: (x.rot + 90) % 360 } : x))} onRemove={() => editPages('current', (c) => c.filter((x) => x.id !== p.id))} />}
+                render={(p, i) => <Thumb page={p} n={i + 1} t={t} targets={targetsFor('current')} onMove={(to) => movePage('current', p.id, to)} onOpen={() => setView({ target: 'current', i })} onRotate={() => editPages('current', (c) => c.map((x) => x.id === p.id ? { ...x, rot: (x.rot + 90) % 360 } : x))} onRemove={() => editPages('current', (c) => c.filter((x) => x.id !== p.id))} />}
                 tail={!!scanning && <div className="flex aspect-[1/1.414] items-center justify-center rounded-md border border-dashed border-accent/50 text-accent"><Loader2 className="size-6 animate-spin" /></div>} />
             ) : <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-mute">
               {scanning ? <Loader2 className="size-8 animate-spin text-accent" /> : <Printer className="size-10 opacity-50" strokeWidth={1.25} />}
@@ -364,9 +382,10 @@ export function BulkScanner() {
         <div className="mt-5 flex justify-end gap-2"><button type="button" className={btn} onClick={() => setAsk(null)}>{t.cancel}</button><button autoFocus className={ask.danger ? primary + ' !bg-red-600' : primary}>{ask.danger ? t.delete : t.ok}</button></div>
       </Dialog>}
 
-      {view && viewPages.length > 0 && <QuickView t={t} pages={viewPages} i={Math.min(view.i, viewPages.length - 1)} onIndex={(i) => setView({ ...view, i })} onClose={() => setView(null)}
+      {view && viewPages.length > 0 && <QuickView t={t} pages={viewPages} i={Math.min(view.i, viewPages.length - 1)} targets={targetsFor(view.target)} canSplit={view.target !== 'current' && viewPages.length > 1} onIndex={(i) => setView({ ...view, i })} onClose={() => setView(null)}
         onRotate={(id) => editPages(view.target, (ps) => ps.map((x) => x.id === id ? { ...x, rot: (x.rot + 90) % 360 } : x))}
-        onRemove={(id) => { if (viewPages.length === 1) setView(null); editPages(view.target, (ps) => ps.filter((x) => x.id !== id)) }} />}
+        onRemove={(id) => { if (viewPages.length === 1) setView(null); editPages(view.target, (ps) => ps.filter((x) => x.id !== id)) }}
+        onMove={(id, to) => { if (viewPages.length === 1) setView(null); movePage(view.target, id, to) }} onSplit={(at) => splitDoc(view.target, at)} onCrop={(id, r) => cropOne(view.target, id, r)} />}
 
       {/* Input-on-save dialog */}
       {asking && <Dialog onClose={() => setAsking(null)} onSubmit={() => commit(asking, Object.fromEntries(inputs.map((b) => [b.id, b.kind === 'date' ? values[b.id] ?? '' : clean(values[b.id] ?? '')])))} width="max-w-md">
@@ -408,6 +427,16 @@ function Splitter({ width, min, max, def, invert, onChange }: { width: number; m
   return <div className="group relative z-20 -mx-[3px] w-[6px] shrink-0 cursor-col-resize" onPointerDown={down} onDoubleClick={() => onChange(def)}><div className={`absolute inset-y-0 left-1/2 w-[2px] -translate-x-1/2 transition-colors ${active ? 'bg-accent' : 'group-hover:bg-accent/70'}`} /></div>
 }
 
+// Toolbar dropdown: click to open a panel below the button; clicking outside or Esc closes it
+function Menu({ label, children, align = 'left', btn, title }: { label: React.ReactNode; children: React.ReactNode; align?: 'left' | 'right'; btn?: string; title?: string }) {
+  const [open, setOpen] = useState(false)
+  useEffect(() => { if (!open) return; const k = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false); addEventListener('keydown', k); return () => removeEventListener('keydown', k) }, [open])
+  return <div className="relative shrink-0" data-open={open || undefined}>
+    <button type="button" title={title} className={btn ?? `inline-flex h-7 items-center gap-1.5 rounded-md border border-line px-2.5 text-[13px] hover:bg-hover ${open ? 'bg-hover' : 'bg-field'}`} onClick={() => setOpen((o) => !o)}>{label}</button>
+    {open && <><div className="fixed inset-0 z-30" onClick={(e) => { e.stopPropagation(); setOpen(false) }} /><div className={`absolute top-full z-40 mt-1 max-h-80 min-w-56 overflow-y-auto rounded-lg border border-line bg-panel p-1 text-[13px] text-fg shadow-xl ${align === 'right' ? 'right-0' : 'left-0'}`} onClick={(e) => { e.stopPropagation(); if ((e.target as HTMLElement).closest('button')) setOpen(false) }}>{children}</div></>}
+  </div>
+}
+
 const Divider = () => <div className="mx-1 h-5 w-px shrink-0 bg-line" />
 
 // Modal sheet; Esc or clicking outside closes, Enter submits
@@ -444,15 +473,18 @@ function Sortable<X extends { id: string }>({ items, render, onMove, className, 
   )
 }
 
-function Thumb({ page, n, t, onOpen, onRotate, onRemove }: { page: Page; n: number; t: T; onOpen: () => void; onRotate: () => void; onRemove: () => void }) {
+type Target = { id: string; label: string }
+
+function Thumb({ page, n, t, targets, onOpen, onRotate, onRemove, onMove }: { page: Page; n: number; t: T; targets: Target[]; onOpen: () => void; onRotate: () => void; onRemove: () => void; onMove: (to: string) => void }) {
   // Box takes the rotated page's own aspect ratio; the unrotated image is sized so that after rotating it fills the box exactly
   const b = 'rounded bg-black/60 p-1 text-white hover:bg-black/80', side = page.rot % 180 !== 0
   return (
     <div className="group">
-      <div className="relative overflow-hidden rounded-md border border-line bg-white shadow-sm group-hover:border-accent" style={{ aspectRatio: side ? `${page.h} / ${page.w}` : `${page.w} / ${page.h}` }} onClick={onOpen}>
-        <img src={urlOf(page.thumb)} alt="" draggable={false} className="absolute left-1/2 top-1/2 max-w-none" style={{ width: side ? `${page.w / page.h * 100}%` : '100%', height: side ? `${page.h / page.w * 100}%` : '100%', transform: `translate(-50%, -50%) rotate(${page.rot}deg)` }} />
-        <div className="absolute right-1.5 top-1.5 hidden gap-1 group-hover:flex" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
+      <div className="relative rounded-md border border-line bg-white shadow-sm group-hover:border-accent" style={{ aspectRatio: side ? `${page.h} / ${page.w}` : `${page.w} / ${page.h}` }} onClick={onOpen}>
+        <div className="absolute inset-0 overflow-hidden rounded-md"><img src={urlOf(page.thumb)} alt="" draggable={false} className="absolute left-1/2 top-1/2 max-w-none" style={{ width: side ? `${page.w / page.h * 100}%` : '100%', height: side ? `${page.h / page.w * 100}%` : '100%', transform: `translate(-50%, -50%) rotate(${page.rot}deg)` }} /></div>
+        <div className="absolute right-1.5 top-1.5 hidden gap-1 group-hover:flex has-[[data-open]]:flex" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
           <button className={b} title={t.rotate} onClick={onRotate}><RotateCw className="size-3.5" /></button>
+          {targets.length > 0 && <Menu btn={b} title={t.moveTo} align="right" label={<FolderInput className="size-3.5" />}><MoveList t={t} targets={targets} onPick={onMove} /></Menu>}
           <button className={b + ' hover:!bg-red-600'} title={t.remove} onClick={onRemove}><Trash2 className="size-3.5" /></button>
         </div>
       </div>
@@ -461,28 +493,58 @@ function Thumb({ page, n, t, onOpen, onRotate, onRemove }: { page: Page; n: numb
   )
 }
 
-// Full-size page viewer: ←/→ browse, R rotates, Delete removes, Esc closes
-function QuickView({ t, pages, i, onIndex, onClose, onRotate, onRemove }: { t: T; pages: Page[]; i: number; onIndex: (i: number) => void; onClose: () => void; onRotate: (id: string) => void; onRemove: (id: string) => void }) {
+const MoveList = ({ t, targets, onPick }: { t: T; targets: Target[]; onPick: (id: string) => void }) => <>
+  <p className="px-2 pb-1 pt-1 text-[11px] font-semibold text-mute">{t.moveTo}</p>
+  {targets.map((x) => <button key={x.id} className="block w-full truncate rounded px-2 py-1.5 text-left text-fg hover:bg-hover" onClick={() => onPick(x.id)}>{x.label}</button>)}
+</>
+
+type CropSel = { x0: number; y0: number; x1: number; y1: number }
+// Full-size page viewer: ←/→ browse, R rotates, Delete removes, C crops, Esc closes (or leaves crop mode)
+function QuickView({ t, pages, i, targets, canSplit, onIndex, onClose, onRotate, onRemove, onMove, onSplit, onCrop }: { t: T; pages: Page[]; i: number; targets: Target[]; canSplit: boolean; onIndex: (i: number) => void; onClose: () => void; onRotate: (id: string) => void; onRemove: (id: string) => void; onMove: (id: string, to: string) => void; onSplit: (at: number) => void; onCrop: (id: string, r: { x: number; y: number; w: number; h: number }) => Promise<void> }) {
   const p = pages[i], go = useCallback((d: number) => onIndex(Math.max(0, Math.min(pages.length - 1, i + d))), [i, pages.length, onIndex])
+  const [crop, setCrop] = useState<CropSel | null | false>(false), [busy, setBusy] = useState(false), img = useRef<HTMLImageElement>(null), drag = useRef(false)
+  useEffect(() => { setCrop(false) }, [p.id])
   useEffect(() => {
-    const k = (e: KeyboardEvent) => { const m: Record<string, () => void> = { Escape: onClose, ArrowLeft: () => go(-1), ArrowRight: () => go(1), r: () => onRotate(p.id), R: () => onRotate(p.id), Delete: () => onRemove(p.id) }; if (m[e.key]) { e.preventDefault(); m[e.key]() } }
+    const k = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement).closest?.('input')) return
+      const m: Record<string, () => void> = crop !== false ? { Escape: () => setCrop(false) } : { Escape: onClose, ArrowLeft: () => go(-1), ArrowRight: () => go(1), r: () => onRotate(p.id), R: () => onRotate(p.id), Delete: () => onRemove(p.id), c: () => setCrop(null), C: () => setCrop(null) }
+      if (m[e.key]) { e.preventDefault(); m[e.key]() }
+    }
     addEventListener('keydown', k); return () => removeEventListener('keydown', k)
-  }, [go, onClose, onRotate, onRemove, p.id])
-  const side = p.rot % 180 !== 0, vb = 'rounded-md p-1.5 text-neutral-300 hover:bg-white/10 hover:text-white'
+  }, [go, onClose, onRotate, onRemove, p.id, crop])
+  // Selection is kept in screen coordinates and clamped to the shown (possibly rotated) image
+  const at = (e: React.PointerEvent) => { const r = img.current!.getBoundingClientRect(); return [Math.min(r.right, Math.max(r.left, e.clientX)), Math.min(r.bottom, Math.max(r.top, e.clientY))] }
+  const sel = crop ? { left: Math.min(crop.x0, crop.x1), top: Math.min(crop.y0, crop.y1), width: Math.abs(crop.x1 - crop.x0), height: Math.abs(crop.y1 - crop.y0) } : null
+  const apply = async () => {
+    if (!sel || !img.current) return
+    const r = img.current.getBoundingClientRect()
+    setBusy(true); await onCrop(p.id, { x: (sel.left - r.left) / r.width, y: (sel.top - r.top) / r.height, w: sel.width / r.width, h: sel.height / r.height }); setBusy(false); setCrop(false)
+  }
+  const side = p.rot % 180 !== 0, vb = 'inline-flex items-center gap-1.5 rounded-md p-1.5 text-neutral-300 hover:bg-white/10 hover:text-white disabled:opacity-30'
   return createPortal(
-    <div className="fixed inset-0 z-50 flex flex-col bg-neutral-900/95 text-neutral-200" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex flex-col bg-neutral-900/95 text-neutral-200" onClick={() => crop === false && onClose()}>
       <div className="flex h-11 shrink-0 items-center justify-between gap-3 border-b border-white/10 px-4" onClick={(e) => e.stopPropagation()}>
-        <span>{t.page(i + 1, pages.length)} <span className="text-neutral-500">· {p.w}×{p.h} · {p.dpi} dpi</span></span>
-        <div className="flex gap-1">
+        <span>{crop !== false ? t.cropHint : <>{t.page(i + 1, pages.length)} <span className="text-neutral-500">· {p.w}×{p.h} · {p.dpi} dpi</span></>}</span>
+        {crop !== false ? <div className="flex gap-2">
+          <button className="rounded-md px-3 py-1 hover:bg-white/10" onClick={() => setCrop(false)}>{t.cancel}</button>
+          <button className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1 font-medium text-white disabled:opacity-40" disabled={!sel || sel.width < 12 || sel.height < 12 || busy} onClick={() => void apply()}>{busy ? <Loader2 className="size-4 animate-spin" /> : <Crop className="size-4" />}{t.applyCrop}</button>
+        </div> : <div className="flex gap-1">
           <button className={vb} title={t.rotate} onClick={() => onRotate(p.id)}><RotateCw className="size-4" /></button>
+          <button className={vb} title={`${t.cropPage} (C)`} onClick={() => setCrop(null)}><Crop className="size-4" /></button>
+          {targets.length > 0 && <Menu btn={vb} title={t.moveTo} align="right" label={<FolderInput className="size-4" />}><MoveList t={t} targets={targets} onPick={(to) => onMove(p.id, to)} /></Menu>}
+          {canSplit && <button className={vb} title={t.splitHint} disabled={i === 0} onClick={() => onSplit(i)}><Scissors className="size-4" />{t.split}</button>}
           <button className={vb + ' hover:!text-red-400'} title={t.remove} onClick={() => onRemove(p.id)}><Trash2 className="size-4" /></button>
           <button className={vb} onClick={onClose}><X className="size-4" /></button>
-        </div>
+        </div>}
       </div>
-      <div className="relative flex min-h-0 flex-1 items-center justify-center p-6">
-        <img src={urlOf(p.blob)} alt="" onClick={(e) => e.stopPropagation()} className="max-h-full max-w-full bg-white object-contain shadow-2xl" style={{ transform: `rotate(${p.rot}deg)`, maxHeight: side ? '80vw' : undefined, maxWidth: side ? 'calc(100vh - 9rem)' : undefined }} />
-        {i > 0 && <button className="absolute left-4 rounded-full bg-black/50 p-2 hover:bg-black/70" onClick={(e) => { e.stopPropagation(); go(-1) }}><ChevronLeft className="size-6" /></button>}
-        {i < pages.length - 1 && <button className="absolute right-4 rounded-full bg-black/50 p-2 hover:bg-black/70" onClick={(e) => { e.stopPropagation(); go(1) }}><ChevronRight className="size-6" /></button>}
+      <div className={`relative flex min-h-0 flex-1 items-center justify-center p-6 ${crop !== false ? 'cursor-crosshair touch-none' : ''}`} onClick={(e) => crop !== false && e.stopPropagation()}
+        onPointerDown={(e) => { if (crop === false || !img.current) return; const [x, y] = at(e); drag.current = true; try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId) } catch { /* pointer already gone */ } setCrop({ x0: x, y0: y, x1: x, y1: y }) }}
+        onPointerMove={(e) => { if (!drag.current || !crop) return; const [x, y] = at(e); setCrop({ ...crop, x1: x, y1: y }) }}
+        onPointerUp={() => { drag.current = false }}>
+        <img ref={img} src={urlOf(p.blob)} alt="" draggable={false} onClick={(e) => e.stopPropagation()} className="max-h-full max-w-full select-none bg-white object-contain shadow-2xl" style={{ transform: `rotate(${p.rot}deg)`, maxHeight: side ? '80vw' : undefined, maxWidth: side ? 'calc(100vh - 9rem)' : undefined }} />
+        {crop === false && i > 0 && <button className="absolute left-4 rounded-full bg-black/50 p-2 hover:bg-black/70" onClick={(e) => { e.stopPropagation(); go(-1) }}><ChevronLeft className="size-6" /></button>}
+        {crop === false && i < pages.length - 1 && <button className="absolute right-4 rounded-full bg-black/50 p-2 hover:bg-black/70" onClick={(e) => { e.stopPropagation(); go(1) }}><ChevronRight className="size-6" /></button>}
+        {sel && <div className="pointer-events-none fixed border-2 border-accent bg-accent/15 shadow-[0_0_0_9999px_rgb(0_0_0/0.45)]" style={sel} />}
       </div>
       <div className="flex shrink-0 justify-center gap-2 overflow-x-auto border-t border-white/10 px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
         {pages.map((x, j) => <button key={x.id} onClick={() => onIndex(j)} className={`h-14 shrink-0 overflow-hidden rounded-sm border-2 bg-white ${j === i ? 'border-accent' : 'border-transparent opacity-60 hover:opacity-100'}`}><img src={urlOf(x.thumb)} alt="" className="h-full" style={{ transform: `rotate(${x.rot}deg)` }} /></button>)}

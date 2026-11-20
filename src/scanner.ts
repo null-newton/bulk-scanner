@@ -5,7 +5,7 @@ export type ColorMode = 'color' | 'gray' | 'bw'
 export interface Scanner { id: string; name: string; model: string; host: string; port?: number; manual?: boolean; demo?: boolean }
 export interface Caps { sources: Source[]; resolutions: number[]; modes: string[] }
 export interface Page { id: string; blob: Blob; thumb: Blob; w: number; h: number; dpi: number; rot: number }
-export interface ScanOpts { source: Source; mode: ColorMode; dpi: number; skipBlank: boolean }
+export interface ScanOpts { source: Source; mode: ColorMode; dpi: number; skipBlank: boolean; autoRotate: boolean; straighten: boolean; crop: boolean }
 
 export const uid = () => Math.random().toString(36).slice(2, 10)
 // True inside the app window; false in a plain browser tab (UI preview: demo scanner only, no Rust backend)
@@ -18,29 +18,39 @@ export const bridgeOnline = async () => true
 export const listScanners = async (_online: boolean, host?: string) => !native ? (host ? Promise.reject(new Error('Adding scanners by IP only works in the desktop app')) : DEMO) : [...await call<Scanner[]>('list_scanners', { host: host ?? null }), ...(host ? [] : DEMO)]
 export const capabilities = (id: string): Promise<Caps> => id.startsWith('demo') ? Promise.resolve({ sources: ['flatbed', 'feeder', 'duplex'], resolutions: [150, 300, 600], modes: [] }) : call<Caps>('capabilities', { id })
 
-type Msg = { type: 'page'; n: number; dpi: number; data: string }
-// Runs a scan job in Rust, receiving each page over a channel; returns the blank pages it held back
+type Msg = { type: 'page'; n: number; dpi: number; data: string; turned?: number; skew?: number; cropped?: boolean }
+// Runs a scan job in Rust (which also rotates/straightens/crops each page), receiving pages over a channel; returns held-back blank pages and how many pages were auto-fixed
 export async function runScan(scanner: Scanner, o: ScanOpts, onPage: (p: Page) => void, onProgress: (n: number) => void, signal: AbortSignal) {
   const skipped: Page[] = []
+  let fixed = 0
   const take = async (blob: Blob, dpi: number) => { const { blank, ...p } = await ingest(blob, dpi, o.mode); if (blank && o.skipBlank) skipped.push(p); else onPage(p) }
   if (scanner.demo) {
     const sides = o.source === 'duplex' ? 2 : 1
     for (let i = 0; i < sides && !signal.aborted; i++) { onProgress(i + 1); await new Promise((r) => setTimeout(r, 700)); await take(await demoPage(i === 1 && Math.random() < 0.5), 75) }
-    return skipped
+    return { skipped, fixed }
   }
   const job = uid(), ch = new Channel<Msg>()
   let n = 0, chain = Promise.resolve()
-  ch.onmessage = (m) => { if (m.type === 'page') { onProgress(++n + 1); chain = chain.then(() => take(new Blob([Uint8Array.from(atob(m.data), (c) => c.charCodeAt(0))], { type: 'image/jpeg' }), m.dpi)) } }
+  ch.onmessage = (m) => { if (m.type === 'page') { onProgress(++n + 1); if (m.turned || m.skew || m.cropped) fixed++; chain = chain.then(() => take(new Blob([Uint8Array.from(atob(m.data), (c) => c.charCodeAt(0))], { type: 'image/jpeg' }), m.dpi)) } }
   const stop = () => void invoke('cancel_scan', { job })
   signal.addEventListener('abort', stop)
   onProgress(1)
-  try { await call('scan', { id: scanner.id, opts: { source: o.source, mode: o.mode, dpi: o.dpi }, job, onPage: ch }) } finally { signal.removeEventListener('abort', stop) }
+  try { await call('scan', { id: scanner.id, opts: { source: o.source, mode: o.mode, dpi: o.dpi }, fix: { autoRotate: o.autoRotate, straighten: o.straighten, crop: o.crop }, job, onPage: ch }) } finally { signal.removeEventListener('abort', stop) }
   await chain
-  return skipped
+  return { skipped, fixed }
 }
 
 const canvas = (w: number, h: number) => Object.assign(document.createElement('canvas'), { width: w, height: h })
 const jpeg = (c: HTMLCanvasElement, q: number) => new Promise<Blob>((r) => c.toBlob((b) => r(b!), 'image/jpeg', q))
+
+// Crops a page to r (fractions of the page as displayed, i.e. after its rotation); the result is unrotated with a new thumbnail
+export async function cropPage(p: Page, r: { x: number; y: number; w: number; h: number }): Promise<Page> {
+  const bmp = await createImageBitmap(p.blob), side = p.rot % 180 !== 0, W = side ? bmp.height : bmp.width, H = side ? bmp.width : bmp.height
+  const c = canvas(Math.max(1, Math.round(r.w * W)), Math.max(1, Math.round(r.h * H))), g = c.getContext('2d')!
+  g.translate(-r.x * W, -r.y * H); g.translate(W / 2, H / 2); g.rotate(p.rot * Math.PI / 180); g.drawImage(bmp, -bmp.width / 2, -bmp.height / 2); bmp.close()
+  const tw = 240, tc = canvas(tw, Math.max(1, Math.round(c.height * tw / c.width))); tc.getContext('2d')!.drawImage(c, 0, 0, tc.width, tc.height)
+  return { ...p, id: uid(), blob: await jpeg(c, 0.9), thumb: await jpeg(tc, 0.7), w: c.width, h: c.height, rot: 0 }
+}
 
 // Decodes a scanned JPEG: flags blank pages, applies B&W threshold and builds a small thumbnail
 export async function ingest(blob: Blob, dpi: number, mode: ColorMode): Promise<Page & { blank: boolean }> {

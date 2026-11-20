@@ -1,5 +1,6 @@
 mod escl;
 mod mdns;
+mod process;
 
 use base64::Engine;
 use escl::{Caps, ScanOpts, Scanner};
@@ -32,12 +33,25 @@ async fn capabilities(st: State<'_, App>, id: String) -> Result<Caps, String> {
 
 // Runs a scan job, streaming each page (base64 JPEG) to the UI; `job` lets cancel_scan stop it
 #[tauri::command]
-async fn scan(st: State<'_, App>, id: String, opts: ScanOpts, job: String, on_page: Channel<serde_json::Value>) -> Result<(), String> {
+async fn scan(st: State<'_, App>, id: String, opts: ScanOpts, fix: process::Opts, job: String, on_page: Channel<serde_json::Value>) -> Result<(), String> {
   let (mut s, token) = (scanner(&st, &id).await?, CancellationToken::new());
   st.jobs.lock().unwrap().insert(job.clone(), token.clone());
-  let mut n = 0;
-  let r = escl::scan(st.http(), &mut s, &opts, &token, |p| { n += 1; let _ = on_page.send(serde_json::json!({ "type": "page", "n": n, "dpi": p.dpi, "data": base64::engine::general_purpose::STANDARD.encode(&p.jpeg) })); }).await;
-  st.jobs.lock().unwrap().remove(&job); remember(&st, &s).await; r
+  // Pages are cleaned up on a worker thread in arrival order while the scanner keeps feeding; crop only makes sense on the flatbed
+  let fix = process::Opts { crop: fix.crop && opts.source == "flatbed", ..fix };
+  let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<escl::Page>();
+  let worker = tauri::async_runtime::spawn(async move {
+    let mut n = 0;
+    while let Some(p) = rx.recv().await {
+      n += 1;
+      let (jpeg, r) = tauri::async_runtime::spawn_blocking(move || process::process(&p.jpeg, fix).unwrap_or((p.jpeg, Default::default()))).await.map_err(|e| e.to_string())?;
+      let _ = on_page.send(serde_json::json!({ "type": "page", "n": n, "dpi": p.dpi, "turned": r.turn, "skew": r.skew, "cropped": r.cropped, "data": base64::engine::general_purpose::STANDARD.encode(&jpeg) }));
+    }
+    Ok::<(), String>(())
+  });
+  let r = escl::scan(st.http(), &mut s, &opts, &token, |p| { let _ = tx.send(p); }).await;
+  drop(tx);
+  let w = worker.await.map_err(|e| e.to_string()).and_then(|x| x);
+  st.jobs.lock().unwrap().remove(&job); remember(&st, &s).await; r.and(w)
 }
 
 #[tauri::command]
@@ -80,8 +94,11 @@ mod tests {
     let f = crate::mdns::discover(2500).await.into_iter().next().expect("no scanner");
     let mut s = crate::escl::Scanner { id: f.id, name: f.name, model: f.model, host: f.host, port: f.port, manual: false, tls: f.tls, rs: f.rs, caps: None };
     let (http, token, mut pages) = (crate::escl::client(), tokio_util::sync::CancellationToken::new(), vec![]);
-    crate::escl::scan(&http, &mut s, &crate::escl::ScanOpts { source: "flatbed".into(), mode: "gray".into(), dpi: 100 }, &token, |p| pages.push(p)).await.unwrap();
+    crate::escl::scan(&http, &mut s, &crate::escl::ScanOpts { source: "flatbed".into(), mode: "gray".into(), dpi: 300 }, &token, |p| pages.push(p)).await.unwrap();
     println!("pages: {:?}", pages.iter().map(|p| (p.dpi, p.jpeg.len(), p.jpeg[..2].to_vec())).collect::<Vec<_>>());
     assert!(!pages.is_empty() && pages[0].jpeg.starts_with(&[0xff, 0xd8]));
+    let t = std::time::Instant::now();
+    let (out, r) = crate::process::process(&pages[0].jpeg, crate::process::Opts { auto_rotate: true, straighten: true, crop: true }).unwrap();
+    println!("processed in {:?}: {r:?}, {} -> {} bytes", t.elapsed(), pages[0].jpeg.len(), out.len());
   }
 }
