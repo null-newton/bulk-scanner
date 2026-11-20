@@ -246,7 +246,7 @@ export function BulkScanner() {
           <div className={head + ' mt-1 border-t border-line'}>{t.session}<span className="font-normal">{session.docs.length}</span></div>
           <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-2">
             {!session.docs.length ? <p className="px-2 py-2 leading-5 text-mute">{t.noDocs}</p> : (
-              <Sortable items={session.docs} onMove={(a, b) => setDocs((d) => move(d, a, b))} render={(d, i) => (
+              <Sortable vertical gap={2} className="flex flex-col gap-0.5" items={session.docs} onMove={(a, b) => setDocs((d) => move(d, a, b))} render={(d, i) => (
                 <div className="group flex items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-hover" onDoubleClick={() => setView({ target: d.id, i: 0 })}>
                   <img src={urlOf(d.pages[0].thumb)} alt="" draggable={false} className="h-10 w-[30px] shrink-0 rounded-sm border border-line bg-white object-cover" style={{ transform: `rotate(${d.pages[0].rot}deg)` }} onClick={() => setView({ target: d.id, i: 0 })} />
                   <div className="min-w-0 flex-1">
@@ -283,7 +283,7 @@ export function BulkScanner() {
           </div>}
           <div className="min-h-0 flex-1 overflow-y-auto p-5">
             {session.current.length ? (
-              <Sortable className="grid grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] gap-4" items={session.current} onMove={(a, b) => setCurrent((c) => move(c, a, b))}
+              <Sortable gap={16} className="grid grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] gap-4" items={session.current} onMove={(a, b) => setCurrent((c) => move(c, a, b))}
                 render={(p, i) => <Thumb page={p} n={i + 1} t={t} onOpen={() => setView({ target: 'current', i })} onRotate={() => editPages('current', (c) => c.map((x) => x.id === p.id ? { ...x, rot: (x.rot + 90) % 360 } : x))} onRemove={() => editPages('current', (c) => c.filter((x) => x.id !== p.id))} />}
                 tail={!!scanning && <div className="flex aspect-[1/1.414] items-center justify-center rounded-md border border-dashed border-accent/50 text-accent"><Loader2 className="size-6 animate-spin" /></div>} />
             ) : <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-mute">
@@ -306,7 +306,7 @@ export function BulkScanner() {
               <button className={ghost} title={t.newPreset} onClick={() => addPreset(false)}><Plus className="size-3.5" /></button>
               <button className={ghost + ' hover:!text-red-500'} title={t.delPreset} disabled={s.presets.length < 2} onClick={() => confirmThen(t.delPresetConfirm, () => update({ presets: s.presets.filter((p) => p.id !== preset.id), presetId: s.presets.find((p) => p.id !== preset.id)!.id }))}><Trash2 className="size-3.5" /></button>
             </div>
-            <Sortable className="flex min-h-11 flex-wrap items-center gap-1 rounded-md border border-line bg-field p-1.5" items={preset.blocks} onMove={(a, b) => setPreset({ blocks: move(preset.blocks, a, b) })} render={(b) => { const I = ICONS[b.kind]; return (
+            <Sortable gap={4} className="flex min-h-11 flex-wrap items-center gap-1 rounded-md border border-line bg-field p-1.5" items={preset.blocks} onMove={(a, b) => setPreset({ blocks: move(preset.blocks, a, b) })} render={(b) => { const I = ICONS[b.kind]; return (
               <button onClick={() => setSelBlock(b.id === selBlock ? null : b.id)} className={`inline-flex h-6 items-center gap-1 rounded border px-1.5 font-mono text-[12px] ${b.id === selBlock ? 'border-accent bg-sel text-accent' : asked(b) ? 'border-ask/40 bg-ask/10 text-ask' : b.kind === 'sep' ? 'border-line bg-hover text-mute' : 'border-line bg-panel text-fg'}`}>
                 {b.kind !== 'sep' && <I className="size-3" />}{blockText(b)}
               </button>) }} />
@@ -404,15 +404,20 @@ function Seg<V extends string>({ value, opts, onChange, full, mono }: { value: V
   return <div className={`flex h-7 shrink-0 rounded-md border border-line bg-hover p-0.5 ${full ? 'w-full' : ''}`}>{opts.map(([v, l, off]) => <button key={v} type="button" disabled={off} onClick={() => onChange(v)} className={`whitespace-nowrap rounded-[5px] px-2.5 text-[12px] disabled:opacity-30 ${full ? 'flex-1' : ''} ${mono ? 'font-mono' : ''} ${v === value ? 'bg-field font-medium text-fg shadow-sm' : 'text-mute hover:text-fg'}`}>{l}</button>)}</div>
 }
 
-// Generic HTML5 drag-and-drop list: drag any item onto another to move it there
-function Sortable<X extends { id: string }>({ items, render, onMove, className, tail }: { items: X[]; render: (x: X, i: number) => React.ReactNode; onMove: (from: number, to: number) => void; className?: string; tail?: React.ReactNode }) {
-  const [drag, setDrag] = useState<number | null>(null), [over, setOver] = useState<number | null>(null)
+// Drag-and-drop reordering with an insertion line: the item goes between neighbours, never onto one. `vertical` lists use a horizontal line; `gap` is the CSS gap in px
+function Sortable<X extends { id: string }>({ items, render, onMove, className, tail, vertical, gap = 0 }: { items: X[]; render: (x: X, i: number) => React.ReactNode; onMove: (from: number, to: number) => void; className?: string; tail?: React.ReactNode; vertical?: boolean; gap?: number }) {
+  const [drag, setDrag] = useState<number | null>(null), [ins, setIns] = useState<number | null>(null)
+  const reset = () => { setDrag(null); setIns(null) }
+  const drop = (e: React.DragEvent) => { if (drag === null) return; e.preventDefault(); if (ins !== null) { const to = ins > drag ? ins - 1 : ins; if (to !== drag) onMove(drag, to) } reset() }
+  const show = (k: number) => drag !== null && ins === k && k !== drag && k !== drag + 1
+  const off = -(gap / 2) - 1.5, line = (k: number, end: boolean) => show(k) && <span className={`pointer-events-none absolute z-10 rounded-full bg-accent ${vertical ? 'inset-x-0 h-[3px]' : 'inset-y-0 w-[3px]'}`} style={{ [vertical ? (end ? 'bottom' : 'top') : (end ? 'right' : 'left')]: off }} />
   return (
-    <div className={className}>
+    <div className={className} onDragOver={(e) => drag !== null && e.preventDefault()} onDrop={drop}>
       {items.map((x, i) => (
-        <div key={x.id} draggable onDragStart={(e) => { setDrag(i); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', x.id) }} onDragEnd={() => { setDrag(null); setOver(null) }}
-          onDragOver={(e) => { if (drag === null) return; e.preventDefault(); setOver(i) }} onDrop={(e) => { e.preventDefault(); if (drag !== null && drag !== i) onMove(drag, i); setDrag(null); setOver(null) }}
-          className={`rounded-md ${drag === i ? 'opacity-40' : ''} ${over === i && drag !== i ? 'outline-2 outline-offset-1 outline-accent' : ''}`}>
+        <div key={x.id} draggable className={`relative rounded-md ${drag === i ? 'opacity-40' : ''}`}
+          onDragStart={(e) => { setDrag(i); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', x.id) }} onDragEnd={reset}
+          onDragOver={(e) => { if (drag === null) return; e.preventDefault(); const r = e.currentTarget.getBoundingClientRect(); setIns(i + ((vertical ? e.clientY - r.top < r.height / 2 : e.clientX - r.left < r.width / 2) ? 0 : 1)) }}>
+          {line(i, false)}{i === items.length - 1 && line(items.length, true)}
           {render(x, i)}
         </div>
       ))}
